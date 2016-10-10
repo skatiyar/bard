@@ -102,6 +102,22 @@ func checkExistingConfig(shards int64) error {
 				return err
 			}
 
+			if numShards < shards {
+				// create new buckets
+			} else {
+				// remove buckets
+			}
+			var i int64
+			for i = 0; i < shards; i++ {
+				_, createBucketErr := tx.CreateBucketIfNotExists([]byte(strconv.FormatInt(i, 10)))
+				if createBucketErr != nil {
+					if rollbackErr := tx.Rollback(); rollbackErr != nil {
+						return rollbackErr
+					}
+
+					return createBucketErr
+				}
+			}
 			// redistribute
 		}
 
