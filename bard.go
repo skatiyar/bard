@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/boltdb/bolt"
 	"hash/fnv"
-	"os"
 	"strconv"
 )
 
@@ -20,8 +19,9 @@ const (
 )
 
 var (
-	ErrInvalidShardNumber = errors.New("Invalid number of shards")
-	ErrDB                 = errors.New("DB not open")
+	ErrInvalidShardNumber      = errors.New("Invalid number of shards")
+	ErrDB                      = errors.New("DB not open")
+	ErrUnableToSaveShardConfig = errors.New("Unable to save shard number in config")
 )
 
 var (
@@ -33,7 +33,7 @@ func Open(path string, shards int64) error {
 		return ErrInvalidShardNumber
 	}
 
-	boltDB, err := bolt.Open(path, os.ModeExclusive, nil)
+	boltDB, err := bolt.Open(path, 0644, nil)
 	if err != nil {
 		return err
 	}
@@ -45,6 +45,14 @@ func Open(path string, shards int64) error {
 	}
 
 	return nil
+}
+
+func Close() error {
+	if db != nil {
+		return db.bolt.Close()
+	}
+
+	return ErrDB
 }
 
 func Put(key, val []byte) error {
@@ -79,50 +87,66 @@ func checkExistingConfig(shards int64) error {
 			return bucketErr
 		}
 
-		numShards, numShardsErr := binary.Varint(bucket.Get([]byte(KeyShardNumber)))
-		if numShardsErr <= 0 {
-			if err := bucket.Put([]byte(KeyShardNumber), []byte(strconv.FormatInt(shards, 10))); err != nil {
-				return err
-			}
+		var numShards int64
+		var numShardsErr int
+		var updateShardNumber bool
 
-			var i int64
-			for i = 0; i < shards; i++ {
-				_, createBucketErr := tx.CreateBucket([]byte(strconv.FormatInt(i, 10)))
-				if createBucketErr != nil {
-					if rollbackErr := tx.Rollback(); rollbackErr != nil {
-						return rollbackErr
-					}
-
-					return createBucketErr
-				}
+		binaryValueNumShards := bucket.Get([]byte(KeyShardNumber))
+		if len(binaryValueNumShards) == 0 {
+			updateShardNumber = true
+		} else {
+			numShards, numShardsErr = binary.Varint(binaryValueNumShards)
+			if numShardsErr <= 0 || numShards <= 0 {
+				updateShardNumber = true
 			}
 		}
 		if numShards != shards {
-			if err := bucket.Put([]byte(KeyShardNumber), []byte(strconv.FormatInt(shards, 10))); err != nil {
+			updateShardNumber = true
+		}
+
+		if rebalanceErr := rebalanceShards(tx, numShards, shards); rebalanceErr != nil {
+			return rebalanceErr
+		}
+
+		if updateShardNumber {
+			buffer := make([]byte, binary.MaxVarintLen64, binary.MaxVarintLen64)
+			bytesRead := binary.PutVarint(buffer, shards)
+			if bytesRead <= 0 {
+				return ErrUnableToSaveShardConfig
+			}
+			if err := bucket.Put([]byte(KeyShardNumber), buffer); err != nil {
 				return err
 			}
-
-			if numShards < shards {
-				// create new buckets
-			} else {
-				// remove buckets
-			}
-			var i int64
-			for i = 0; i < shards; i++ {
-				_, createBucketErr := tx.CreateBucketIfNotExists([]byte(strconv.FormatInt(i, 10)))
-				if createBucketErr != nil {
-					if rollbackErr := tx.Rollback(); rollbackErr != nil {
-						return rollbackErr
-					}
-
-					return createBucketErr
-				}
-			}
-			// redistribute
 		}
 
 		return nil
 	})
+}
+
+func rebalanceShards(tx *bolt.Tx, old, new int64) error {
+	if itrErr := tx.ForEach(func(name []byte, bucket *bolt.Bucket) error {
+		if string(name) == BardConfigBucket {
+			return nil
+		}
+
+		bucketIndex, bucketIndexErr := binary.Varint(name)
+		if bucketIndexErr < 0 {
+		}
+		return bucket.ForEach(func(key, val []byte) error {
+		})
+	}); itrErr != nil {
+		return itrErr
+	}
+	if old < new {
+		for i := old + 1; i < new; i++ {
+			println(i)
+		}
+		return nil
+	} else if old > new {
+		return nil
+	} else {
+		return nil
+	}
 }
 
 func keyToHash(key []byte) uint64 {

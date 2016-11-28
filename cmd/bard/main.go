@@ -2,22 +2,18 @@ package main
 
 import (
 	"github.com/SKatiyar/bard"
-	"io/ioutil"
 	"log"
-	"os"
 )
 
 func main() {
-	tmpfile, err := ioutil.TempFile("", "bard")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer os.Remove(tmpfile.Name())
-
-	if dbErr := bard.Open(tmpfile.Name(), 3); dbErr != nil {
+	if dbErr := bard.Open("db/ole", 1000000); dbErr != nil {
 		log.Fatal(dbErr)
 	}
+	defer func() {
+		if closeErr := bard.Close(); closeErr != nil {
+			log.Println(closeErr)
+		}
+	}()
 
 	if putErr := bard.Put([]byte("hello"), []byte("world")); putErr != nil {
 		log.Fatal(putErr)
@@ -29,4 +25,5 @@ func main() {
 	}
 
 	log.Println(string(getVal))
+
 }

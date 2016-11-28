@@ -6,6 +6,7 @@
 # Folders
 _obj
 _test
+cmd/bard/db
 
 # Architecture specific extensions/prefixes
 *.[568vq]
