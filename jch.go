@@ -1,5 +1,14 @@
 package bard
 
+import "hash/fnv"
+
+func keyToHash(key []byte) uint64 {
+	hasher := fnv.New64a()
+	hasher.Write(key)
+
+	return hasher.Sum64()
+}
+
 func jch(key uint64, buckets int64) int64 {
 	var j int64 = 0
 	var b int64 = -1
