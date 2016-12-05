@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	if dbErr := bard.Open("db/ole", 10); dbErr != nil {
+	if dbErr := bard.Open("db/ole", 12); dbErr != nil {
 		log.Fatal(dbErr)
 	}
 	defer func() {

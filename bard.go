@@ -47,6 +47,20 @@ func Close() error {
 
 func checkExistingShards(shards int64) error {
 	return db.bolt.Update(func(tx *bolt.Tx) error {
+		var i int64
+		for i = 0; i < shards; i++ {
+			buffer := make([]byte, binary.MaxVarintLen64, binary.MaxVarintLen64)
+			bytesRead := binary.PutVarint(buffer, i)
+			if bytesRead <= 0 {
+				return ErrShardNumber
+			}
+
+			_, nextBucketErr := tx.CreateBucketIfNotExists(buffer)
+			if nextBucketErr != nil {
+				return nextBucketErr
+			}
+		}
+
 		return tx.ForEach(func(name []byte, bucket *bolt.Bucket) error {
 			bucketIndex, bucketIndexErr := binary.Varint(name)
 			if bucketIndexErr < 0 {
