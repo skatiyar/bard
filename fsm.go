@@ -8,6 +8,7 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/hashicorp/raft"
 	"io"
+	"log"
 )
 
 const (
@@ -106,14 +107,19 @@ func (f *fsm) Apply(fsmLog *raft.Log) interface{} {
 
 		return &cmd{cmdError, [][]byte{[]byte(ErrCmdInvalidAction.Error())}}
 	} else if fsmLog.Type == raft.LogNoop {
+		log.Println("noop")
 		return nil
 	} else if fsmLog.Type == raft.LogAddPeer {
+		log.Println("add peer")
 		return nil
 	} else if fsmLog.Type == raft.LogBarrier {
+		log.Println("barrier")
 		return nil
 	} else if fsmLog.Type == raft.LogRemovePeer {
+		log.Println("rm peer")
 		return nil
 	} else {
+		log.Println("none")
 		return nil
 	}
 }

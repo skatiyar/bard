@@ -3,12 +3,12 @@ package bard
 import (
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/raft-boltdb"
-	"net"
+	"log"
 	"os"
 )
 
-func newRaft(port, master, dbPathPrefix string) (*raft.Raft, error) {
-	network, networkErr := newNetwork(port, master)
+func newRaft(port, dbPathPrefix string) (*raft.Raft, error) {
+	network, networkErr := newNetwork(port)
 	if networkErr != nil {
 		return nil, networkErr
 	}
@@ -24,7 +24,9 @@ func newRaft(port, master, dbPathPrefix string) (*raft.Raft, error) {
 	}
 
 	config := raft.DefaultConfig()
-	config.StartAsLeader = true
+	// config.EnableSingleNode = true
+	// config.StartAsLeader = true
+	config.Logger = log.New(os.Stdout, "[ Raft ] ", log.LstdFlags)
 
 	iRaft, iRaftErr := raft.NewRaft(
 		config,
@@ -41,22 +43,12 @@ func newRaft(port, master, dbPathPrefix string) (*raft.Raft, error) {
 	return iRaft, nil
 }
 
-func newNetwork(port, master string) (raft.Transport, error) {
-	var slaveAddr net.Addr
-	var slaveAddrErr error
-
-	if len(master) != 0 {
-		slaveAddr, slaveAddrErr = net.ResolveTCPAddr("tcp", master)
-		if slaveAddrErr != nil {
-			return nil, slaveAddrErr
-		}
-	}
-
-	return raft.NewTCPTransport(port, slaveAddr, 10, 10, os.Stdout)
+func newNetwork(port string) (raft.Transport, error) {
+	return raft.NewTCPTransportWithLogger(port, nil, 10, 10, log.New(os.Stdout, "[ Net ] ", log.LstdFlags))
 }
 
 func newPeerStore(trans raft.Transport) raft.PeerStore {
-	return raft.NewJSONPeers("bard-peers", trans)
+	return raft.NewJSONPeers("db", trans)
 }
 
 func newSnapshotStore() raft.SnapshotStore {

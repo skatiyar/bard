@@ -15,7 +15,7 @@ var (
 	db = &Store{}
 )
 
-func Open(path, master, port string, shards int64) error {
+func Open(path, port string, shards int64) error {
 	if shards < 1 {
 		return ErrInvalidShardNumber
 	}
@@ -25,7 +25,7 @@ func Open(path, master, port string, shards int64) error {
 		return boltDBErr
 	}
 
-	iRaft, iRaftErr := newRaft(port, master, path)
+	iRaft, iRaftErr := newRaft(port, path)
 	if iRaftErr != nil {
 		return iRaftErr
 	}
