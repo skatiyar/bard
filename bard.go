@@ -3,6 +3,7 @@ package bard
 import (
 	"encoding/binary"
 	"github.com/boltdb/bolt"
+	"time"
 )
 
 const (
@@ -14,25 +15,46 @@ var (
 	db = &Store{}
 )
 
-func Open(path string, shards int64) error {
+func Open(path, master, port string, shards int64) error {
 	if shards < 1 {
 		return ErrInvalidShardNumber
 	}
 
-	boltDB, err := bolt.Open(path, 0644, nil)
-	if err != nil {
-		return err
+	boltDB, boltDBErr := bolt.Open(path, 0644, nil)
+	if boltDBErr != nil {
+		return boltDBErr
 	}
 
+	iRaft, iRaftErr := newRaft(port, master, path)
+	if iRaftErr != nil {
+		return iRaftErr
+	}
+
+	db.raft = iRaft
 	db.bolt = boltDB
 	db.numShards = shards
-	db.reSharding = true
+	db.sharding = true
 
 	if configErr := checkExistingShards(shards); configErr != nil {
 		return configErr
 	}
 
-	db.reSharding = false
+	db.sharding = false
+
+	/*
+		return db.bolt.View(func(tx *bolt.Tx) error {
+			return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+				log.Println("-- name ->", string(name))
+				i := 0
+				b.ForEach(func(key, value []byte) error {
+					i++
+					return nil
+				})
+				log.Println("-- -- pair ->", i)
+				return nil
+			})
+		})
+	*/
 
 	return nil
 }
@@ -42,6 +64,7 @@ func Close() error {
 		return ErrDB
 	}
 
+	// TODO shutdown raft
 	return db.bolt.Close()
 }
 
@@ -99,15 +122,16 @@ func Put(key, val []byte) error {
 		return ErrDB
 	}
 
-	return db.bolt.Update(func(tx *bolt.Tx) error {
-		buffer := make([]byte, binary.MaxVarintLen64, binary.MaxVarintLen64)
-		bytesRead := binary.PutVarint(buffer, jch(keyToHash(key), db.numShards))
-		if bytesRead <= 0 {
-			return ErrShardNumber
-		}
+	data, dataErr := marshalCmd(&cmd{"put", [][]byte{key, val}})
+	if dataErr != nil {
+		return dataErr
+	}
 
-		return tx.Bucket(buffer).Put(key, val)
-	})
+	if futureErr := db.raft.Apply(data, 5*time.Second).Error(); futureErr != nil {
+		return futureErr
+	}
+
+	return nil
 }
 
 func Get(key []byte) ([]byte, error) {
@@ -117,14 +141,24 @@ func Get(key []byte) ([]byte, error) {
 		return value, ErrDB
 	}
 
-	return value, db.bolt.View(func(tx *bolt.Tx) error {
-		buffer := make([]byte, binary.MaxVarintLen64, binary.MaxVarintLen64)
-		bytesRead := binary.PutVarint(buffer, jch(keyToHash(key), db.numShards))
-		if bytesRead <= 0 {
-			return ErrShardNumber
-		}
+	data, dataErr := marshalCmd(&cmd{"get", [][]byte{key}})
+	if dataErr != nil {
+		return value, dataErr
+	}
 
-		value = tx.Bucket(buffer).Get(key)
-		return nil
-	})
+	future := db.raft.Apply(data, 5*time.Second)
+	if futureErr := future.Error(); futureErr != nil {
+		return value, futureErr
+	}
+
+	cmdRes, cmdResErr := unmarshalCmd(future.Response())
+	if cmdResErr != nil {
+		return value, cmdResErr
+	}
+
+	if len(cmdRes.Data) > 0 && cmdRes.Action == "response" {
+		value = cmdRes.Data[0]
+	}
+
+	return value, nil
 }
