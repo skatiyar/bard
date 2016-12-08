@@ -5,11 +5,14 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 func main() {
-	if dbErr := bard.Open(os.Args[1], os.Args[2], 10); dbErr != nil {
+	peers := append(make([]string, 0), strings.Split(os.Args[3], ",")...)
+
+	if dbErr := bard.Open(os.Args[1], os.Args[2], 10, peers); dbErr != nil {
 		log.Fatalln("1", dbErr)
 	}
 	defer func() {

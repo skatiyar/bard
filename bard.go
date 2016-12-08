@@ -15,17 +15,17 @@ var (
 	db = &Store{}
 )
 
-func Open(path, port string, shards int64) error {
+func Open(path, port string, shards int64, peers []string) error {
 	if shards < 1 {
 		return ErrInvalidShardNumber
 	}
 
-	boltDB, boltDBErr := bolt.Open(path, 0644, nil)
+	boltDB, boltDBErr := bolt.Open(path+"/db", 0644, nil)
 	if boltDBErr != nil {
 		return boltDBErr
 	}
 
-	iRaft, iRaftErr := newRaft(port, path)
+	iRaft, iRaftErr := newRaft(port, path, peers)
 	if iRaftErr != nil {
 		return iRaftErr
 	}
